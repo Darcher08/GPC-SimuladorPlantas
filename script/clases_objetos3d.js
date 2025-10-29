@@ -75,3 +75,13 @@ export class Caja extends Objeto3D {
         return this
     }
 }
+
+export class Sol extends Objeto3D {
+
+    constructor(scene) {
+        const path = 'objetos3D/sol/sol.fbx';
+        super(scene, path);
+
+    }
+
+}

@@ -14,6 +14,12 @@ let macetas = []; // Cambiado a array para múltiples macetas
 let cajas = [];
 const posicionesUsadasCajas = [];
 
+
+// variable para el sol como objeto
+let sun;
+//crear variables que sea una luz dirigida en el mismo sentido que el sol
+
+
 // Configuración del grid
 const GRID_SIZE = 20;
 const GRID_HALF = GRID_SIZE / 2;
@@ -40,7 +46,7 @@ async function init() {
     .1,
     1000
   );
-  camera.position.set(0, 12, 15); // Altura de ojos humanos + alejado del cubo
+  camera.position.set(0, 12, 25); // Altura de ojos humanos + alejado del cubo
   camera.lookAt(0, 0, 0);
   // 3. Configurar el renderizador
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -50,13 +56,10 @@ async function init() {
   // 4. Instanciar el control de cámara
   cameraMovement = new CameraMovement(camera, document.body);
 
-  // 5. Añadir luces
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  // 5. Añadir luces 0xffffff 0x404040
+  const ambientLight = new THREE.AmbientLight(0xffffff, 2); // Más oscuro
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.1);
-  directionalLight.position.set(0, 0, -10);
-  scene.add(directionalLight);
 
   // Cargar todos los objetos a la escena
   //* MACETAS - Crear múltiples instancias
@@ -69,6 +72,44 @@ async function init() {
   //* PISO
   piso = new CLASE.RocaPiso(scene);
   await piso.cargarObjeto();
+
+  //* SOL
+
+  sun = new CLASE.Sol(scene);
+  await sun.cargarObjeto();
+  sun.refObjeto.position.set(0, 40, 0);
+  sun.refObjeto.scale.setScalar(0.09);
+
+  // SOLUCIÓN: El sol no debe proyectar ni recibir sombras
+  sun.refObjeto.castShadow = false;
+  sun.refObjeto.receiveShadow = false;
+  sun.refObjeto.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = false;
+      child.receiveShadow = false;
+    }
+  });
+  // Crear la luz direccional del sol
+  const sunLight = new THREE.DirectionalLight(0xF28B16, 3); // Color cálido y brillante
+  sunLight.castShadow = true; // Si quieres sombras
+
+  // Configurar sombras (opcional pero recomendado)
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.near = 0.5;
+  sunLight.shadow.camera.far = 150;
+  sunLight.shadow.camera.left = -50;
+  sunLight.shadow.camera.right = 50;
+  sunLight.shadow.camera.top = 50;
+  sunLight.shadow.camera.bottom = -50;
+
+  // Añadir la luz como hijo del sol para que se mueva con él
+  sun.refObjeto.add(sunLight);
+
+  // La luz apuntará hacia abajo desde el sol
+  sunLight.position.set(0, 0, 0); // Posición relativa al sol
+  sunLight.target.position.set(0, -40, 0); // Apunta hacia abajo
+  sun.refObjeto.add(sunLight.target); // Importante: agregar el target como hijo también
 
   // 9. Manejar redimensionamiento de ventana
   window.addEventListener('resize', onWindowResize);
@@ -203,7 +244,44 @@ function animate() {
     piso.refObjeto.position.y = -4.8;
   }
 
+  // Define el tiempo de órbita en segundos
+  const orbitDuration = 24; // t segundos para completar una vuelta
+  const orbitRadius = 50; // Radio de la órbita (ajusta según tu escena)
+
+  // En tu función de animación (donde tienes delta time)
+  if (sun && sun.isLoaded && sun.refObjeto) {
+    // Calcula el ángulo basado en el tiempo
+    const angularSpeed = (Math.PI * 2) / orbitDuration; // radianes por segundo
+    const angle = (Date.now() / 1000) * angularSpeed; // ángulo actual
+
+    // Actualiza la posición para orbitar
+    sun.refObjeto.position.x = Math.cos(angle) * orbitRadius;
+    sun.refObjeto.position.y = Math.sin(angle) * orbitRadius;
+    const sunLight = sun.refObjeto.children.find(child => child.isDirectionalLight);
+    if (sunLight) {
+      const height = sun.refObjeto.position.y;
+
+      // Define el rango donde ocurre la transición
+      const transitionStart = -5;  // Empieza a apagarse aquí
+      const transitionEnd = 5;     // Totalmente encendido aquí
+
+      // Normalizar entre 0 y 1
+      const t = THREE.MathUtils.clamp(
+        (height - transitionStart) / (transitionEnd - transitionStart),
+        0,
+        1
+      );
+
+      // smoothstep hace la transición más natural (curva S)
+      sunLight.intensity = THREE.MathUtils.smoothstep(t, 0, 1);
+    }
+    // Opcional: rota el sol sobre sí mismo
+    sun.refObjeto.rotation.y += 0.001;
+  }
+
   // Renderizar la escena
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Sombras suaves
   renderer.render(scene, camera);
 }
 
